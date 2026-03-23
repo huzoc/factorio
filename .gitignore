@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+
+# Keep showcase files
+!showcase.gif
+!showcase.mp4
+
+# Output
+scan_output/
+scan_output_v2/
+scan_output_v3/
+scan_output_test/
+*.mp4
+*.avi
+*.mkv
+
+# Temporary frames
+timelapse_frames_*/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Conda
+.conda/

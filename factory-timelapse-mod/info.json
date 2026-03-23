@@ -1,0 +1,11 @@
+{
+  "name": "factory-timelapse",
+  "version": "0.1.0",
+  "title": "Factory Timelapse",
+  "author": "Huzoc",
+  "contact": "https://github.com/huzoc/factorio",
+  "homepage": "https://github.com/huzoc/factorio",
+  "factorio_version": "2.0",
+  "description": "Generate interactive timelapse visualizations from existing save files or live play. Watch your factory grow from the first furnace to megabase.",
+  "dependencies": ["base >= 2.0.0"]
+}

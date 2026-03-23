@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factorio Timelapse Viewer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div id="info">
+        <div id="clock">0:00</div>
+        <div id="snapshot-info">Snapshot 0/0 — 0 entities</div>
+        <div id="data-source"></div>
+        <div id="activity" class="activity"></div>
+    </div>
+
+    <div id="legend">
+        <h3>OVERLAYS</h3>
+        <div class="overlay-toggles" id="overlay-toggles"></div>
+        <hr>
+        <h3>ENTITIES</h3>
+        <div id="legend-items"></div>
+    </div>
+
+    <div id="tooltip">
+        <div class="tt-name"></div>
+        <div class="tt-product"></div>
+        <div class="tt-pos"></div>
+    </div>
+
+    <div id="controls">
+        <button id="btn-play">▶ Play</button>
+        <button id="btn-slower">−</button>
+        <span id="speed-label">0.02x</span>
+        <button id="btn-faster">+</button>
+        <input type="range" id="timeline" min="0" max="100" value="0">
+        <span id="time-label">Snapshot 0/0</span>
+    </div>
+
+    <div id="loading">Loading scan data...</div>
+
+    <script src="viewer.js"></script>
+    <script src="cinematic.js"></script>
+</body>
+</html>

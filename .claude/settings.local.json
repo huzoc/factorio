@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:lua-api.factorio.com)",
+      "WebFetch(domain:wiki.factorio.com)",
+      "Bash(mkdir -p /c/data/11-development/factorio/factory-timelapse-mod)",
+      "Bash(mkdir -p /c/data/11-development/factorio/timelapse-renderer)"
+    ]
+  }
+}
