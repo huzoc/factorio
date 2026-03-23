@@ -9,10 +9,6 @@ build/
 .venv/
 venv/
 
-# Keep showcase files
-!showcase.gif
-!showcase.mp4
-
 # Output
 scan_output/
 scan_output_v2/
@@ -21,6 +17,10 @@ scan_output_test/
 *.mp4
 *.avi
 *.mkv
+
+# Keep showcase files
+!showcase.gif
+!showcase.mp4
 
 # Temporary frames
 timelapse_frames_*/
