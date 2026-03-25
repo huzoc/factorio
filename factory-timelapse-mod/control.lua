@@ -508,17 +508,12 @@ pcall(function()
   end)
 end)
 
--- Write baseline snapshot on mod init
+-- On mod init: just write session marker (baseline scanned offline via benchmark mode)
 script.on_init(function()
   if is_live_mode() then
-    local surface_name = get_surface_name()
-    local filename = OUTPUT_DIR .. "baseline.json"
-    local count = scan_surface(surface_name, game.tick, filename)
-    game.print("[Timelapse] Baseline scan complete: " .. count .. " entities captured at tick " .. game.tick)
-    storage.baseline_written = true
-    -- Write session start marker
     local line = string.format('{"tick":%d,"action":"session_start","reason":"init"}\n', game.tick)
     helpers.write_file(OUTPUT_DIR .. "events.jsonl", line, true)
+    game.print("[Timelapse] Live capture active. Events will be recorded.")
   end
 end)
 

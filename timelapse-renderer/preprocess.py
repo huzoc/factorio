@@ -270,11 +270,16 @@ def _compute_rail_graph(entities, rail_entities):
             e["conn"] = [[c[0], c[1]] for c in conn]
 
 
-def parse_live_events(events_path):
-    """Parse live mode events.jsonl, handling save reloads.
+def parse_live_events(events_path, baseline_tick=None):
+    """Parse live mode events.jsonl, handling save reloads and mixed saves.
 
     When a session_start event has a tick <= the previous session's last tick,
     all events from the previous session after the reload point are discarded.
+
+    If baseline_tick is provided, only sessions belonging to the same timeline
+    are kept: sessions whose start tick >= baseline_tick and form a coherent
+    ascending chain. Sessions from unrelated saves (wildly different tick ranges)
+    are discarded.
     """
     import json
 
@@ -302,8 +307,47 @@ def parse_live_events(events_path):
         # No session markers — return all events as-is
         return [ev for ev in raw_events if ev.get("action") in ("built", "removed")]
 
+    # Filter sessions to only those belonging to the baseline save's timeline
+    if baseline_tick is not None:
+        # A session belongs to this save if its start tick is plausible:
+        # - >= baseline_tick (can't have events before the save existed)
+        # - Within a reasonable range of the timeline we're building
+        # Strategy: walk sessions in order, keep those that form an ascending
+        # chain starting from baseline_tick. A session that jumps to a
+        # completely different tick range (>2x gap from max seen tick) is
+        # from a different save — skip it.
+        filtered_sessions = []
+        max_tick_seen = baseline_tick
+        for start_idx, start_tick in sessions:
+            if start_tick < baseline_tick:
+                # Session from before this save — different save, skip
+                continue
+            # Check for unreasonable jump (heuristic: session starts >10x
+            # further than any event we've seen — likely a different save)
+            if max_tick_seen > 0 and start_tick > max_tick_seen * 10 and start_tick - max_tick_seen > 3600000:
+                # >10x jump AND >1 hour gap at 60 UPS — different save
+                continue
+            filtered_sessions.append((start_idx, start_tick))
+            # Update max_tick_seen by scanning events in this session
+            next_idx = len(raw_events)
+            for s_idx, s_tick in sessions:
+                if s_idx > start_idx:
+                    next_idx = s_idx
+                    break
+            for ei in range(start_idx, next_idx):
+                t = raw_events[ei].get("tick", 0)
+                if t > max_tick_seen:
+                    max_tick_seen = t
+
+        dropped = len(sessions) - len(filtered_sessions)
+        if dropped:
+            print(f"[live] Filtered out {dropped} sessions from other saves (baseline tick: {baseline_tick})")
+        sessions = filtered_sessions
+
+    if not sessions:
+        return []
+
     # Process sessions: later sessions override earlier ones if ticks overlap
-    # Walk backwards through sessions to find the "winning" timeline
     # The last session always wins. For each earlier session, only keep events
     # before the next session's start tick.
     kept_events = []
@@ -347,29 +391,72 @@ def parse_live_events(events_path):
 
 def main():
     parser = argparse.ArgumentParser(description="Preprocess scan data for web viewer")
-    parser.add_argument("--input", "-i", required=True, help="Directory with scan_*.json files or live mode data (baseline.json + events.jsonl)")
+    parser.add_argument("--input", "-i", required=True, help="Directory with scan_*.json files or live mode data (events.jsonl)")
     parser.add_argument("--output", "-o", default="viewer_data.json", help="Output file (default: viewer_data.json)")
     parser.add_argument("--first", "-n", type=int, default=None, help="Only use first N scans")
     parser.add_argument("--factorio-data", "-d", default=None, help="Path to Factorio data/ dir for icon sprite atlas")
+    parser.add_argument("--baseline-save", "-b", default=None, help="Save file (.zip) to scan as baseline for live mode (scanned via benchmark)")
+    parser.add_argument("--factorio", "-f", default=None, help="Path to factorio.exe (for --baseline-save scanning)")
+    parser.add_argument("--mod-dir", "-m", default=None, help="Path to Factorio mods directory (for --baseline-save scanning)")
     args = parser.parse_args()
 
     input_dir = Path(args.input)
     output_path = Path(args.output)
 
-    # Detect mode: live (baseline.json + events.jsonl) or scan (scan_*.json)
+    # Detect mode: live (events.jsonl) or scan (scan_*.json)
     live_events_path = input_dir / "events.jsonl"
-    baseline_path = input_dir / "baseline.json"
     is_live = live_events_path.exists()
 
     if is_live:
+        if not args.baseline_save:
+            print("ERROR: Live mode requires --baseline-save <save.zip> to scan the starting state.")
+            print("  The save is scanned offline via Factorio benchmark mode.")
+            return
+
+        print("[0/6] Scanning baseline save via benchmark mode...")
+        from scan_saves import scan_single_save, find_factorio, _inject_save_name
+        import tempfile, shutil
+
+        factorio_exe = Path(args.factorio) if args.factorio else find_factorio()
+        if not factorio_exe or not factorio_exe.exists():
+            print(f"ERROR: Cannot find factorio.exe: {factorio_exe}")
+            print("  Specify with --factorio /path/to/factorio.exe")
+            return
+
+        mod_dir = Path(args.mod_dir) if args.mod_dir else (Path.home() / "AppData/Roaming/Factorio/mods")
+        baseline_save = Path(args.baseline_save)
+        if not baseline_save.exists():
+            print(f"ERROR: Baseline save not found: {baseline_save}")
+            return
+
+        worker_base = tempfile.mkdtemp(prefix="factorio_baseline_")
+        try:
+            idx, ok, msg, size_kb, elapsed = scan_single_save(
+                str(factorio_exe), str(baseline_save), str(mod_dir), worker_base, 0
+            )
+            if not ok:
+                print(f"ERROR: Baseline scan failed: {msg}")
+                return
+            # Copy scan result to input dir as baseline
+            baseline_dest = input_dir / "baseline.json"
+            shutil.copy2(msg, str(baseline_dest))
+            _inject_save_name(baseline_dest, baseline_save.name)
+            # Read baseline tick for session filtering
+            baseline_data = json.loads(baseline_dest.read_text(encoding="utf-8"))
+            baseline_tick = baseline_data.get("tick", 0)
+            print(f"  Baseline scanned: {size_kb:.0f} KB in {elapsed:.1f}s (tick {baseline_tick})")
+        finally:
+            shutil.rmtree(worker_base, ignore_errors=True)
+
         print("[1/6] Loading live mode data...")
-        live_events = parse_live_events(live_events_path)
-        # TODO: full live mode preprocessing (baseline + events -> viewer_data.json)
-        # For now, just report what we found
+        live_events = parse_live_events(live_events_path, baseline_tick=baseline_tick)
         print(f"  {len(live_events)} clean events from live capture")
         if not live_events:
             print("  No usable events found.")
             return
+        # TODO: full live mode preprocessing (baseline + events -> viewer_data.json)
+        print("  Live mode preprocessing not yet fully implemented.")
+        print("  Baseline saved to baseline.json — can be used as first scan.")
 
     # Load scans
     print("[1/6] Loading scan files...")

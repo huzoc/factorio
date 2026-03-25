@@ -16,8 +16,7 @@ The system has three components:
 
 A Factorio 2.0 mod that captures entity data in two modes:
 
-- **Live mode** — Listens to all build/remove events during gameplay with near-zero performance impact. Outputs to `script-output/factory-timelapse/`:
-  - `baseline.json` — full surface scan on mod init (one-time)
+- **Live mode** — Listens to all build/remove events during gameplay with zero startup delay and near-zero performance impact. No baseline scan on load — the starting state is read from your save file offline during timelapse generation. Outputs to `script-output/factory-timelapse/`:
   - `events.jsonl` — each build/remove with player name, product, belt type (~150 bytes/event). Also captures space platform state changes (departure, arrival, deletion).
   - `player_positions.jsonl` — all players every 5 seconds with position, surface, and color (~120 bytes/player/5s)
   - Periodic space platform snapshots (state, location, speed, entity count) every 5 seconds
@@ -35,14 +34,14 @@ A Factorio 2.0 mod that captures entity data in two modes:
 
 #### Installation
 
-Copy or symlink `factory-timelapse-mod` into your Factorio mods directory as `factory-timelapse_0.1.0`:
+Copy or symlink `factory-timelapse-mod` into your Factorio mods directory as `factory-timelapse_0.2.0`:
 
 ```bash
 # Standalone install
-cp -r factory-timelapse-mod /path/to/factorio/mods/factory-timelapse_0.1.0
+cp -r factory-timelapse-mod /path/to/factorio/mods/factory-timelapse_0.2.0
 
 # Steam (Windows)
-cp -r factory-timelapse-mod "%APPDATA%/Factorio/mods/factory-timelapse_0.1.0"
+cp -r factory-timelapse-mod "%APPDATA%/Factorio/mods/factory-timelapse_0.2.0"
 ```
 
 #### Mod Settings
@@ -92,6 +91,16 @@ python preprocess.py \
   --input ./scan_output \
   --output ./scan_output/viewer_data.json \
   --factorio-data /path/to/factorio/data   # optional: generates sprite atlas for product icons
+```
+
+For live mode, provide the save file you were playing as baseline:
+
+```bash
+python preprocess.py \
+  --input /path/to/script-output/factory-timelapse \
+  --baseline-save /path/to/saves/my-save.zip \
+  --factorio /path/to/factorio.exe \
+  --output viewer_data.json
 ```
 
 Preprocesses all scan data into a single optimized file:

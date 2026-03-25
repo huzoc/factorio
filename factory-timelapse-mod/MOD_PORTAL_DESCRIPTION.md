@@ -1,5 +1,7 @@
 # Factory Timelapse
 
+**Zero impact on game load time.** The mod only captures build/remove events during gameplay — no surface scanning on startup. The baseline state is read from your save file offline during timelapse generation.
+
 **Turn your existing save files into interactive timelapse visualizations.** Watch your factory grow from the first stone furnace to a sprawling megabase — no recording needed, works retroactively with saves you already have.
 
 ![Showcase](https://raw.githubusercontent.com/huzoc/factorio/master/showcase.gif)
@@ -21,7 +23,7 @@ The batch scanner loads each save via Factorio's headless mode, extracts all ent
 
 ## Live capture during gameplay
 
-Install the mod and play normally. It silently records every build and remove event with near-zero performance impact (~1.5MB for an 8-hour session). After your session, process the data into a timelapse.
+Install the mod and play normally. It silently records every build and remove event with near-zero performance impact (~1.5MB for an 8-hour session). No baseline scan on startup — the mod starts instantly. When generating the timelapse, you provide the starting save file and the tool reads it offline via benchmark mode.
 
 ## Interactive web viewer
 
@@ -65,6 +67,6 @@ Full documentation, source code, and tools: **https://github.com/huzoc/factorio*
 
 ## Performance
 
-- **Live capture:** ~150 bytes per build event, player position logged every 5 seconds. No UPS impact.
+- **Live capture:** ~150 bytes per build event, player position logged every 5 seconds. No UPS impact. No startup delay — baseline is scanned offline.
 - **Save scanning:** Each save loaded headless. ~5-30s per save depending on factory size. Use `--workers` for parallel scanning.
 - **Viewer:** Runs at 60fps in the browser with LOD scaling. Preprocessed data loads near-instantly.
