@@ -1,6 +1,6 @@
 """Automate scanning multiple Factorio saves using benchmark mode.
 
-Uses --benchmark to load each save, run 1 tick (triggering auto-scan), then exit.
+Uses --benchmark to load each save, run the auto-scan handler, then exit.
 Supports parallel scanning with isolated write directories per worker.
 """
 
@@ -60,21 +60,6 @@ def _create_worker_config(worker_dir: Path, factorio_exe: Path, mod_dir: Path) -
         encoding="utf-8",
     )
 
-    # Share the mods directory — use a directory junction (Windows) or symlink (Unix)
-    # This avoids copying potentially large mod files for each worker
-    worker_mods = worker_dir / "mods"
-    if not worker_mods.exists():
-        import platform
-        if platform.system() == "Windows":
-            # Directory junction — no admin rights needed, works like a symlink
-            import subprocess
-            subprocess.run(
-                ["cmd", "/c", "mklink", "/J", str(worker_mods), str(mod_dir)],
-                capture_output=True,
-            )
-        else:
-            worker_mods.symlink_to(mod_dir)
-
     return config_path
 
 
@@ -86,7 +71,7 @@ def scan_single_save(
     save_index: int,
     timeout: int = 900,
 ) -> tuple[int, bool, str, float]:
-    """Load a save with --benchmark (1 tick), collect output.
+    """Load a save via --benchmark, trigger the mod's auto-scan, collect output.
 
     Returns (save_index, success, message, size_kb, elapsed_s).
     Runs in a separate process for parallelism.
@@ -105,8 +90,9 @@ def scan_single_save(
         cmd = [
             str(factorio_exe),
             "--benchmark", str(save_path),
-            "--benchmark-ticks", "1",
+            "--benchmark-ticks", "3",
             "--config", str(config_path),
+            "--mod-directory", str(mod_dir),
             "--disable-audio",
         ]
 
@@ -124,16 +110,17 @@ def scan_single_save(
             last_lines = "\n".join(lines[-3:])
             return (save_index, False, f"exit code {result.returncode}: {last_lines}", 0, elapsed)
 
-        # Collect the scan output
+        # Collect the scan output — find the main nauvis scan (largest file)
         scan_dir = worker_dir / "script-output" / "factory-timelapse"
-        output_files = sorted(scan_dir.glob("*.json"), key=lambda f: f.stat().st_mtime) if scan_dir.exists() else []
+        output_files = sorted(scan_dir.glob("scan_*.json"), key=lambda f: f.stat().st_size, reverse=True) if scan_dir.exists() else []
 
         if not output_files:
             return (save_index, False, "no scan file produced", 0, elapsed)
 
-        latest = output_files[-1]
-        size_kb = latest.stat().st_size / 1024
-        return (save_index, True, str(latest), size_kb, elapsed)
+        # Return all scan files as pipe-separated paths (largest/nauvis first)
+        all_paths = "|".join(str(f) for f in output_files)
+        size_kb = output_files[0].stat().st_size / 1024
+        return (save_index, True, all_paths, size_kb, elapsed)
 
     except subprocess.TimeoutExpired:
         elapsed = _time.time() - t0
@@ -212,6 +199,8 @@ def main():
     # Find Factorio
     if args.factorio:
         factorio_exe = Path(args.factorio.strip().strip('"'))
+        if factorio_exe.is_dir():
+            factorio_exe = factorio_exe / "factorio.exe"
     else:
         factorio_exe = find_factorio()
     if not factorio_exe or not factorio_exe.exists():
@@ -280,14 +269,22 @@ def main():
     def _collect_result(idx, save, ok, msg, size_kb):
         nonlocal success
         if ok:
-            src = Path(msg)
+            paths = [Path(p) for p in msg.split("|")]
+            # First file is the largest (nauvis) — save as scan_NNNN.json
             dest = output_dir / f"scan_{idx:04d}.json"
-            shutil.move(str(src), str(dest))
-            # Inject save source name into JSON
+            shutil.move(str(paths[0]), str(dest))
             _inject_save_name(dest, save.name)
             if idx % WATER_INTERVAL != 0:
                 _strip_water(dest)
                 size_kb = dest.stat().st_size / 1024
+            # Copy extra surfaces (platforms, planets) with suffix
+            for extra in paths[1:]:
+                # Extract surface name from filename: scan_TICK_SURFACE.json
+                parts = extra.stem.split("_", 2)
+                suffix = parts[2] if len(parts) > 2 else extra.stem
+                extra_dest = output_dir / f"scan_{idx:04d}_{suffix}.json"
+                shutil.move(str(extra), str(extra_dest))
+                _inject_save_name(extra_dest, save.name)
             success += 1
             return True, size_kb
         return False, 0
