@@ -555,10 +555,9 @@ script.on_event(defines.events.on_tick, function(event)
     helpers.write_file(OUTPUT_DIR .. "events.jsonl", line, true)
   end
 
-  local autoscan = settings.global["factory-timelapse-autoscan"].value
-  local no_players = #game.connected_players == 0
-
-  if autoscan or no_players then
+  -- Scan only when autoscan is enabled (batch scanner sets this via mod-settings.dat).
+  -- Default is false, so normal gameplay is not affected.
+  if settings.global["factory-timelapse-autoscan"].value then
     local tick = game.tick
     -- Scan the configured surface (primary)
     local surface_name = get_surface_name()
