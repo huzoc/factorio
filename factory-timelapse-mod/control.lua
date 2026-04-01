@@ -555,10 +555,9 @@ script.on_event(defines.events.on_tick, function(event)
     helpers.write_file(OUTPUT_DIR .. "events.jsonl", line, true)
   end
 
-  -- Always scan on first load (handler self-unregisters after one run).
-  -- Note: game.connected_players includes saved players in benchmark mode,
-  -- so checking #game.connected_players == 0 is unreliable for headless detection.
-  do
+  -- Scan only when autoscan is enabled (batch scanner sets this via mod-settings.dat).
+  -- Default is false, so normal gameplay is not affected.
+  if settings.global["factory-timelapse-autoscan"].value then
     local tick = game.tick
     -- Scan the configured surface (primary)
     local surface_name = get_surface_name()

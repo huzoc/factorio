@@ -44,6 +44,58 @@ def find_script_output(factorio_exe: Path) -> Path:
     return Path.home() / "AppData/Roaming/Factorio/script-output/factory-timelapse"
 
 
+def _create_autoscan_settings(dst: Path):
+    """Generate a minimal mod-settings.dat with factory-timelapse-autoscan enabled."""
+    import struct
+
+    buf = bytearray()
+    buf += struct.pack('<4H', 2, 0, 76, 0)  # version 2.0.76.0
+    buf += b'\x00'  # root flag
+
+    def pack_str(s):
+        b = s.encode('utf-8')
+        return b'\x00' + struct.pack('B', len(b)) + b
+
+    def pack_dict(n):
+        return b'\x05\x00' + struct.pack('<I', n)
+
+    buf += pack_dict(3)
+    buf += pack_str("startup") + pack_dict(0)
+    buf += pack_str("runtime-global") + pack_dict(1)
+    buf += pack_str("factory-timelapse-autoscan") + pack_dict(1)
+    buf += pack_str("value") + b'\x01\x00\x01'  # bool = true
+    buf += pack_str("runtime-per-user") + pack_dict(0)
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(buf)
+
+
+def _enable_autoscan_settings(worker_dir: Path, mod_dir: Path):
+    """Create mod-settings.dat in worker dir with autoscan enabled.
+
+    Copies existing settings and patches the flag, or generates a minimal
+    settings file if the source is unavailable.
+    """
+    dst = worker_dir / "mods" / "mod-settings.dat"
+    src = mod_dir / "mod-settings.dat"
+    marker = b"factory-timelapse-autoscan"
+
+    if src.exists():
+        data = bytearray(src.read_bytes())
+        idx = data.find(marker)
+        if idx >= 0:
+            # Bool value is 15 bytes after the end of the setting name:
+            # dict(05 00) count(01 00 00 00) key_str(00 05 "value") bool(01 00 XX)
+            val_offset = idx + len(marker) + 15
+            if val_offset < len(data) and data[val_offset - 2] == 0x01:
+                data[val_offset] = 0x01
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(data)
+                return
+
+    _create_autoscan_settings(dst)
+
+
 def _create_worker_config(worker_dir: Path, factorio_exe: Path, mod_dir: Path) -> Path:
     """Create a minimal Factorio config pointing write-data to a worker-specific directory."""
     worker_dir.mkdir(parents=True, exist_ok=True)
@@ -59,6 +111,8 @@ def _create_worker_config(worker_dir: Path, factorio_exe: Path, mod_dir: Path) -
         f"write-data={worker_dir}\n",
         encoding="utf-8",
     )
+
+    _enable_autoscan_settings(worker_dir, mod_dir)
 
     return config_path
 
